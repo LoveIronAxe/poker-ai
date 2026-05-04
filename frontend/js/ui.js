@@ -165,10 +165,20 @@ window.PokerUI = (() => {
   }
 
   function isGodMode() { return godMode; }
+  function setGodMode(on) {
+    godMode = on;
+    const btn = getEl('btn-god');
+    if (btn) btn.className = 'btn' + (godMode ? ' active' : '');
+    const bar = getEl('god-mode-bar');
+    if (bar) {
+      bar.className = godMode ? 'info-bar visible' : 'info-bar';
+      bar.textContent = '👁 上帝模式 — 显示所有底牌 & 实时胜率';
+    }
+  }
   function toggleGodMode() {
     godMode = !godMode;
     const btn = getEl('btn-god');
-    btn.className = 'btn' + (godMode ? ' active' : '');
+    if (btn) btn.className = 'btn' + (godMode ? ' active' : '');
     if (window.App) window.App.refreshUI();
     showToast(godMode ? '上帝模式: 显示所有底牌 & 胜率' : '上帝模式已关闭');
   }
@@ -241,7 +251,7 @@ window.PokerUI = (() => {
 
   return {
     renderTable, renderActionButtons, updateBetSlider,
-    showToast, toggleGodMode, isGodMode, disableAllButtons,
+    showToast, toggleGodMode, setGodMode, isGodMode, disableAllButtons,
     createCardEl, createCardBack,
   };
 })();

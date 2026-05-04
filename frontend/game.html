@@ -2,138 +2,139 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>德州扑克 AI 陪练 — 5D 复盘系统</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover, maximum-scale=1.0">
+<title>德州扑克 AI 陪练</title>
 <link rel="stylesheet" href="css/styles.css">
+<style>
+  /* Inline critical layout styles to prevent FOUC */
+  html, body { overflow: hidden; height: 100dvh; }
+</style>
 </head>
 <body>
 <div id="app">
 
-  <!-- ═══ Sidebar ═══ -->
-  <div class="sidebar" id="sidebar">
-    <!-- Player card -->
-    <div class="sidebar-section">
-      <div class="player-card">
-        <div class="player-avatar" id="sidebar-avatar">P</div>
-        <div class="player-detail">
-          <div class="player-name" id="sidebar-name">牌手</div>
-          <div class="player-subtitle" id="sidebar-stats-summary">暂无数据</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quick actions -->
-    <div class="sidebar-section">
-      <div class="sidebar-nav">
-        <button class="sidebar-btn active" id="sb-btn-god" onclick="App.toggleGodMode()">
-          <span class="sb-icon">👁</span> 上帝模式
-        </button>
-        <button class="sidebar-btn" id="sb-btn-coach" onclick="App.toggleCoachMode()">
-          <span class="sb-icon">🎓</span> AI 教练
-        </button>
-        <button class="sidebar-btn" onclick="App.newHand()">
-          <span class="sb-icon">🔄</span> 新一局
-        </button>
-        <button class="sidebar-btn" onclick="App.toggleReview()">
-          <span class="sb-icon">📊</span> 复盘面板
-        </button>
-        <button class="sidebar-btn" onclick="App.showHistory()">
-          <span class="sb-icon">📜</span> 牌局历史
-        </button>
-        <button class="sidebar-btn" onclick="App.toggleSettings()">
-          <span class="sb-icon">⚙️</span> 设置
-        </button>
-      </div>
-    </div>
-
-    <!-- AI Coach chat -->
-    <div class="sidebar-section coach-chat" id="coach-chat-section">
-      <div class="coach-chat-header">AI 教练</div>
-      <div class="coach-messages" id="coach-messages">
-        <div class="coach-empty">教练提示会在这里显示<br>开启教练模式获得实时指导</div>
-      </div>
-    </div>
-
-    <!-- Stats summary -->
-    <div class="sidebar-section">
-      <div class="sidebar-stats">
-        <div class="sidebar-stat">
-          <div class="ss-value" id="ss-hands">0</div>
-          <div class="ss-label">总手数</div>
-        </div>
-        <div class="sidebar-stat">
-          <div class="ss-value" id="ss-score">--</div>
-          <div class="ss-label">平均评分</div>
-        </div>
-      </div>
+  <!-- ═══ Top Bar (compact, fixed) ═══ -->
+  <div class="top-bar" id="top-bar">
+    <a href="index.html" class="back-link">← 返回</a>
+    <span class="page-title" id="top-title">AI 陪练</span>
+    <div class="top-bar-actions">
+      <button class="btn" id="btn-god" onclick="App.toggleGodMode()">👁</button>
+      <button class="btn" id="btn-new" onclick="App.newHand()">🔄</button>
+      <button class="btn" id="btn-review-toggle" onclick="App.toggleReview()" style="display:none">📊</button>
+      <button class="btn" onclick="App.toggleSettings()">⚙️</button>
     </div>
   </div>
 
-  <!-- ═══ Main Content ═══ -->
-  <div class="main-content" id="main-content">
-    <!-- Top bar -->
-    <div class="top-bar">
-      <a href="index.html" class="back-link">← 返回首页</a>
-      <span class="page-title">AI 陪练</span>
-      <div class="top-bar-actions">
-        <button class="btn active" id="btn-god" onclick="App.toggleGodMode()">👁 上帝</button>
-        <button class="btn" id="btn-new" onclick="App.newHand()">🔄 新一局</button>
-        <button class="btn" id="btn-review-toggle" onclick="App.toggleReview()">📊 复盘</button>
-        <button class="btn" onclick="App.toggleSettings()">⚙️</button>
-      </div>
+  <!-- ═══ Phase dots ═══ -->
+  <div class="phase-indicator" id="phase-dots">
+    <span class="phase-dot lit"></span>
+    <span class="phase-dot"></span>
+    <span class="phase-dot"></span>
+    <span class="phase-dot"></span>
+  </div>
+
+  <!-- ═══ God/Coach mode indicator ═══ -->
+  <div class="info-bar" id="god-mode-bar">👁 上帝模式</div>
+
+  <!-- ═══ Poker Table (fills available space) ═══ -->
+  <div id="table-container">
+    <div class="pot-display" id="pot-display">底池: 0</div>
+    <div class="community-cards" id="community-cards"></div>
+    <div id="seats-container"></div>
+  </div>
+
+  <!-- ═══ Action Bar (fixed bottom) ═══ -->
+  <div id="action-bar">
+    <button class="btn danger" id="btn-fold" onclick="App.playerAction('fold')">弃牌</button>
+    <button class="btn" id="btn-check" onclick="App.playerAction('check')">过牌</button>
+    <button class="btn" id="btn-call" onclick="App.playerAction('call')">跟注</button>
+    <div class="bet-slider-container">
+      <button class="btn primary" id="btn-raise" onclick="App.playerAction('raise')">加注</button>
+      <input type="range" id="bet-slider" min="2" max="200" value="6" oninput="App.updateBetSlider()">
+      <span class="bet-amount" id="bet-amount">6</span>
     </div>
+    <button class="btn" id="btn-allin" onclick="App.playerAction('allin')">All-in</button>
+  </div>
 
-    <!-- Phase dots -->
-    <div class="phase-indicator" id="phase-dots">
-      <span class="phase-dot lit"></span>
-      <span class="phase-dot"></span>
-      <span class="phase-dot"></span>
-      <span class="phase-dot"></span>
-    </div>
-
-    <!-- God mode indicator -->
-    <div class="info-bar" id="god-mode-bar">👁 上帝模式 — 显示所有底牌 & 实时胜率</div>
-
-    <!-- Poker Table -->
-    <div id="table-container">
-      <div class="pot-display" id="pot-display">底池: 0</div>
-      <div class="community-cards" id="community-cards"></div>
-      <div id="seats-container"></div>
-    </div>
-
-    <!-- Action Bar -->
-    <div id="action-bar">
-      <button class="btn danger" id="btn-fold" onclick="App.playerAction('fold')">弃牌</button>
-      <button class="btn" id="btn-check" onclick="App.playerAction('check')">过牌</button>
-      <button class="btn" id="btn-call" onclick="App.playerAction('call')">跟注</button>
-      <div class="bet-slider-container">
-        <button class="btn primary" id="btn-raise" onclick="App.playerAction('raise')">加注</button>
-        <input type="range" id="bet-slider" min="2" max="200" value="6" oninput="App.updateBetSlider()">
-        <span class="bet-amount" id="bet-amount">6</span>
-      </div>
-      <button class="btn" id="btn-allin" onclick="App.playerAction('allin')">All-in</button>
-    </div>
-
-    <!-- 3D Timeline -->
-    <div id="timeline-section">
-      <h3>⏳ 3D 时间线 <span style="font-size:0.63rem;color:var(--text-tertiary)">(点击节点回溯继续)</span></h3>
-      <div class="timeline-3d" id="timeline"></div>
-    </div>
-
-    <!-- Review Panel -->
-    <div id="review-panel">
+  <!-- ═══ Review Overlay (slides up after hand) ═══ -->
+  <div class="review-overlay" id="review-overlay" hidden>
+    <div class="review-sheet">
+      <div class="modal-handle"></div>
       <div class="review-header">
         <div>
           <span class="review-score" id="review-total">--</span>
-          <span style="font-size:0.78rem;color:var(--text-tertiary)"> /100</span>
+          <span style="font-size:0.78rem;color:var(--muted-foreground)"> /100</span>
         </div>
         <span class="review-grade grade-B" id="review-grade">B</span>
+        <button class="btn" onclick="App.closeReview()" style="margin-left:auto">✕</button>
       </div>
       <canvas id="radar-canvas" width="280" height="280"></canvas>
       <div class="dim-bars" id="dim-bars"></div>
       <div class="error-list" id="error-list"></div>
       <div class="training-tags" id="training-tags"></div>
+      <div style="margin-top:16px">
+        <button class="btn primary" id="btn-ai-review" onclick="App.generateAIReview()" style="width:100%;justify-content:center;">
+          🤖 AI 深度复盘
+        </button>
+      </div>
+      <div id="ai-review-result" style="margin-top:12px;font-size:0.82rem;line-height:1.6;white-space:pre-wrap;display:none"></div>
+      <button class="btn primary" onclick="App.newHand()" style="width:100%;margin-top:12px;justify-content:center;">
+        🔄 下一局
+      </button>
     </div>
+  </div>
+
+  <!-- ═══ Settings Overlay ═══ -->
+  <div class="modal-overlay" id="settings-overlay" hidden onclick="App.closeSettings(event)">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+      <div class="modal-handle"></div>
+      <div class="modal-title">⚙️ 设置</div>
+
+      <div class="form-group">
+        <label class="form-label">玩家昵称</label>
+        <input class="form-input" id="setting-nickname" placeholder="输入昵称" maxlength="20">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">AI 难度</label>
+        <select class="form-select" id="setting-difficulty">
+          <option value="1">🟢 初级</option>
+          <option value="2" selected>🟡 中级</option>
+          <option value="3">🔴 高级</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">AI API Endpoint</label>
+        <input class="form-input" id="setting-api-url" placeholder="https://api.openai.com/v1/chat/completions">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input" id="setting-api-key" type="password" placeholder="sk-...">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">模型名称</label>
+        <input class="form-input" id="setting-model" placeholder="gpt-4o / claude-sonnet-4-6 / deepseek-chat">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">复盘提示词模板</label>
+        <textarea class="form-input" id="setting-review-prompt" rows="4" placeholder="你是一位世界级德州扑克教练。请分析以下牌局数据并给出改进建议...&#10;&#10;牌局数据: {{HAND_DATA}}&#10;&#10;请从以下维度分析:&#10;1. 关键决策点&#10;2. 范围分析&#10;3. 改进建议"></textarea>
+      </div>
+
+      <button class="btn primary" onclick="App.saveSettings()" style="width:100%;margin-top:12px;justify-content:center;">
+        💾 保存设置
+      </button>
+      <button class="btn" onclick="App.closeSettings()" style="width:100%;margin-top:8px;justify-content:center;">关闭</button>
+    </div>
+  </div>
+
+  <!-- ═══ Timeline (hidden during play, shown in review) ═══ -->
+  <div id="timeline-section" style="display:none">
+    <h3>⏳ 时间线 <span style="font-size:0.63rem;color:var(--muted-foreground)">(点击节点回溯)</span></h3>
+    <div class="timeline-3d" id="timeline"></div>
   </div>
 
 </div>
