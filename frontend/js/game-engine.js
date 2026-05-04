@@ -616,6 +616,21 @@ window.PokerEngine = (() => {
     } catch(e) { return {}; }
   }
 
+  // ── Attach Review to Most Recent History ──
+  function attachReviewToHistory(review) {
+    try {
+      const history = JSON.parse(localStorage.getItem('poker_hand_history') || '[]');
+      if (history.length > 0) {
+        history[0].review = {
+          totalScore: review.totalScore,
+          grade: review.grade,
+          dimensions: review.dimensions,
+        };
+        localStorage.setItem('poker_hand_history', JSON.stringify(history));
+      }
+    } catch(e) { console.warn('Failed to attach review', e); }
+  }
+
   // ── Exports ──
   return {
     SUITS, SUIT_SYMBOLS, RANK_NAMES, HAND_RANKS, HAND_NAMES_CN,
@@ -625,6 +640,7 @@ window.PokerEngine = (() => {
     advancePhase, showdown, endHand, nextActive,
     saveSnapshot, restoreSnapshot,
     saveHandToHistory, getHandHistory,
+    attachReviewToHistory,
     saveUserProfile, getUserProfile,
     saveAPIConfig, getAPIConfig,
   };

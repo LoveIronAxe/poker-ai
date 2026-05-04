@@ -19,15 +19,43 @@ window.App = (() => {
 
   // ── Init ──
   function init() {
+    const params = new URLSearchParams(window.location.search);
+
+    // Read config from URL params (set by dashboard) or use defaults
+    aiDifficulty = parseInt(params.get('difficulty')) || 2;
+    const numPlayers = parseInt(params.get('opponents')) || 6;
+    const stackSize = parseInt(params.get('stack')) || 1000;
+    const godMode = params.get('god') === '1';
+    const coachMode = params.get('coach') === '1';
+    const autoReview = params.get('autoReview') === '1';
+
+    // Auto-enable review if autoReview is set
+    if (autoReview) reviewVisible = true;
+
+    // Load saved profile
     loadSettings();
-    game = E.createGame(6, 1, 2, [1000, 1000, 1000, 1000, 1000, 1000]);
+
+    // Create game with configured settings
+    const stacks = Array(numPlayers).fill(stackSize);
+    game = E.createGame(numPlayers, 1, aiDifficulty, stacks);
     game.players[0].isHuman = true;
-    game.players[0].name = '你';
-    game.players[1].name = 'Alpha';
-    game.players[2].name = 'Bravo';
-    game.players[3].name = 'Charlie';
-    game.players[4].name = 'Delta';
-    game.players[5].name = 'Echo';
+    game.players[0].name = (E.getUserProfile().nickname) || '你';
+    const aiNames = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India'];
+    for (let i = 1; i < numPlayers; i++) {
+      game.players[i].name = aiNames[i - 1] || `AI-${i}`;
+    }
+
+    // Apply god mode if configured
+    if (godMode) {
+      setTimeout(() => UI.toggleGodMode(), 500);
+    }
+
+    // Show coach badge if active
+    if (coachMode && document.getElementById('god-mode-bar')) {
+      document.getElementById('god-mode-bar').textContent = '🎓 AI 教练模式 — 实时提示 & 胜率分析';
+      document.getElementById('god-mode-bar').style.display = 'block';
+    }
+
     newHand();
   }
 
@@ -128,9 +156,11 @@ window.App = (() => {
   }
 
   function onHandComplete() {
-    // Auto-show review
+    // Always generate review and attach to history
+    const review = Review.reviewHand(game, humanIdx);
+    E.attachReviewToHistory(review);
+
     if (reviewVisible) {
-      const review = Review.reviewHand(game, humanIdx);
       Review.renderReview(review);
       Review.drawRadar('radar-canvas', review.dimensions);
     }
