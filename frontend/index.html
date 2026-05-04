@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>德州扑克 AI 陪练 — 5D 复盘系统</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <h1>♠ 德州扑克 AI 陪练</h1>
+    <div class="header-btns">
+      <button class="btn active" id="btn-god" onclick="App.toggleGodMode()">👁 上帝</button>
+      <button class="btn" id="btn-new" onclick="App.newHand()">🔄 新一局</button>
+      <button class="btn gold" id="btn-review-toggle" onclick="App.toggleReview()">📊 复盘</button>
+      <button class="btn" onclick="App.showHistory()">📜 历史</button>
+      <button class="btn" onclick="App.toggleSettings()">⚙️</button>
+    </div>
+  </div>
+
+  <!-- Phase dots -->
+  <div class="phase-indicator" id="phase-dots">
+    <span class="phase-dot lit"></span>
+    <span class="phase-dot"></span>
+    <span class="phase-dot"></span>
+    <span class="phase-dot"></span>
+  </div>
+
+  <!-- God mode indicator -->
+  <div id="god-mode-bar">👁 上帝模式 — 显示所有底牌 & 实时胜率</div>
+
+  <!-- Poker Table -->
+  <div id="table-container">
+    <div class="pot-display" id="pot-display">底池: 0</div>
+    <div class="community-cards" id="community-cards"></div>
+    <div id="seats-container"></div>
+  </div>
+
+  <!-- Action Bar -->
+  <div id="action-bar">
+    <button class="btn danger" id="btn-fold" onclick="App.playerAction('fold')">弃牌</button>
+    <button class="btn" id="btn-check" onclick="App.playerAction('check')">过牌</button>
+    <button class="btn" id="btn-call" onclick="App.playerAction('call')">跟注</button>
+    <div class="bet-slider-container">
+      <button class="btn primary" id="btn-raise" onclick="App.playerAction('raise')">加注</button>
+      <input type="range" id="bet-slider" min="2" max="200" value="6" oninput="App.updateBetSlider()">
+      <span class="bet-amount" id="bet-amount">6</span>
+    </div>
+    <button class="btn" id="btn-allin" onclick="App.playerAction('allin')">All-in</button>
+  </div>
+
+  <!-- 3D Timeline -->
+  <div id="timeline-section">
+    <h3>⏳ 3D 时间线 <span style="font-size:0.65rem;color:var(--text-dim)">(点击节点回溯继续)</span></h3>
+    <div class="timeline-3d" id="timeline"></div>
+  </div>
+
+  <!-- Review Panel -->
+  <div id="review-panel">
+    <div class="review-header">
+      <div>
+        <span class="review-score" id="review-total">--</span>
+        <span style="font-size:0.8rem;color:var(--text-dim)"> /100</span>
+      </div>
+      <span class="review-grade grade-B" id="review-grade">B</span>
+    </div>
+    <canvas id="radar-canvas" width="280" height="280"></canvas>
+    <div class="dim-bars" id="dim-bars"></div>
+    <div class="error-list" id="error-list"></div>
+    <div class="training-tags" id="training-tags"></div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/game-engine.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/review.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
