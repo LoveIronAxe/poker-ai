@@ -283,7 +283,10 @@
   App.closeModal = function(event) {
     const overlay = $('modal-overlay');
     if (!overlay) return;
-    if (event && event.target !== overlay) return;
+    // If called without event (from cancel button), close directly
+    if (!event) { overlay.hidden = true; return; }
+    // Only close when clicking overlay background, not its children
+    if (event.target !== overlay) return;
     overlay.hidden = true;
   };
 
@@ -339,7 +342,10 @@
   App.closeProfileModal = function(event) {
     const modal = $('profile-modal');
     if (!modal) return;
-    if (event && event.target !== modal) return;
+    // If called without event (from cancel button), close directly
+    if (!event) { modal.hidden = true; return; }
+    // Only close when clicking overlay background, not its children
+    if (event.target !== modal) return;
     modal.hidden = true;
   };
 
