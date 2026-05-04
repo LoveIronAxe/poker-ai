@@ -14,24 +14,29 @@
     { text: '不要因为一手牌输了就觉得自己打错了。过程比结果更重要。', author: '— Daniel Negreanu' },
   ];
 
+  // ── Safe DOM helper ──
+  function $(id) { return document.getElementById(id); }
+  function safeText(id, text) { const el = $(id); if (el) el.textContent = text; }
+
   // ── Init ──
   App.init = function() {
-    const profile = JSON.parse(localStorage.getItem('poker_user_profile') || '{}');
-    const history = JSON.parse(localStorage.getItem('poker_hand_history') || '[]');
+    try {
+    const profile = (() => { try { return JSON.parse(localStorage.getItem('poker_user_profile') || '{}'); } catch(e) { return {}; } })();
+    const history = (() => { try { return JSON.parse(localStorage.getItem('poker_hand_history') || '[]'); } catch(e) { return []; } })();
 
     // Greeting
-    document.getElementById('user-name').textContent = profile.nickname || '牌手';
-    document.getElementById('avatar-initial').textContent = (profile.nickname || 'P')[0];
+    safeText('user-name', profile.nickname || '牌手');
+    safeText('avatar-initial', (profile.nickname || 'P')[0]);
 
     // Date
     const now = new Date();
     const days = ['日','一','二','三','四','五','六'];
-    document.getElementById('date-display').textContent =
+    $('date-display').textContent =
       `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 · 星期${days[now.getDay()]}`;
 
     // Quote
     const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-    document.getElementById('quote-text').textContent = q.text;
+    $('quote-text').textContent = q.text;
     document.querySelector('.quote-author').textContent = q.author;
 
     // Stats
@@ -49,14 +54,18 @@
     // Quick resume button
     const lastState = localStorage.getItem('poker_last_game_state');
     if (lastState) {
-      document.getElementById('btn-resume').hidden = false;
+      const btn = $('btn-resume');
+      if (btn) btn.hidden = false;
+    }
+    } catch(e) {
+      console.warn('Dashboard init error:', e);
     }
   };
 
   // ── Stats Calculation ──
   App.renderStats = function(history, profile) {
     const totalHands = history.length;
-    document.getElementById('stat-hands').textContent = totalHands;
+    $('stat-hands').textContent = totalHands;
 
     // Average score from review data
     let totalScore = 0, scoreCount = 0;
@@ -66,14 +75,14 @@
         scoreCount++;
       }
     });
-    document.getElementById('stat-score').textContent = scoreCount > 0
+    $('stat-score').textContent = scoreCount > 0
       ? (totalScore / scoreCount).toFixed(0)
       : '--';
 
     // Today's hands
     const today = new Date().toISOString().slice(0, 10);
     const todayHands = history.filter(h => h.date && h.date.slice(0, 10) === today).length;
-    document.getElementById('stat-today-hands').textContent = `今日 +${todayHands}`;
+    $('stat-today-hands').textContent = `今日 +${todayHands}`;
 
     // Score change (last 7 days vs previous 7 days)
     const now = new Date();
@@ -84,7 +93,7 @@
     });
     if (recent7.length > 0) {
       const avg = recent7.reduce((s,h) => s + h.review.totalScore, 0) / recent7.length;
-      document.getElementById('stat-score-change').textContent = `${avg.toFixed(0)} 近7天`;
+      $('stat-score-change').textContent = `${avg.toFixed(0)} 近7天`;
     }
 
     // Training focus
@@ -109,13 +118,13 @@
       const avg = n > 0 ? sum / n : 0;
       if (avg < weakestVal) { weakestVal = avg; weakest = k; }
     });
-    document.getElementById('stat-focus').textContent = dimNames[weakest];
-    document.getElementById('stat-focus-detail').textContent = '建议优先提升';
+    $('stat-focus').textContent = dimNames[weakest];
+    $('stat-focus-detail').textContent = '建议优先提升';
 
     // Streak
     const streak = App.calcStreak(history, profile);
-    document.getElementById('stat-streak').textContent = `${streak.current}天`;
-    document.getElementById('stat-best-streak').textContent = `最佳 ${streak.best}天`;
+    $('stat-streak').textContent = `${streak.current}天`;
+    $('stat-best-streak').textContent = `最佳 ${streak.best}天`;
   };
 
   // ── Streak Calculation ──
@@ -168,7 +177,7 @@
 
   // ── Weekly Streak Bar ──
   App.renderStreak = function(history, profile) {
-    const container = document.getElementById('streak-bar');
+    const container = $('streak-bar');
     const daysWithHands = new Set();
     history.forEach(h => {
       if (h.date) daysWithHands.add(h.date.slice(0,10));
@@ -195,8 +204,8 @@
 
   // ── History List ──
   App.renderHistoryList = function(history) {
-    const container = document.getElementById('history-list');
-    document.getElementById('history-count').textContent = history.length;
+    const container = $('history-list');
+    $('history-count').textContent = history.length;
 
     if (history.length === 0) {
       container.innerHTML = `<div class="empty-state">
@@ -232,7 +241,7 @@
 
   // ── Skill Bars ──
   App.renderSkillBars = function(history) {
-    const container = document.getElementById('skill-bars');
+    const container = $('skill-bars');
     const dims = [
       { key: 'range', name: '范围选择', color: '#0071e3' },
       { key: 'position', name: '位置打法', color: '#34c759' },
@@ -261,48 +270,54 @@
 
   // ── Open Hand Detail ──
   App.openHandDetail = function(index) {
-    // Store the index and navigate to game.html for review
     localStorage.setItem('poker_view_hand_index', index);
     window.location.href = 'game.html?view=history&idx=' + index;
   };
 
   // ── New Match Modal ──
   App.openNewMatch = function() {
-    document.getElementById('modal-overlay').hidden = false;
+    const overlay = $('modal-overlay');
+    if (overlay) overlay.hidden = false;
   };
 
   App.closeModal = function(event) {
-    if (event && event.target !== document.getElementById('modal-overlay')) return;
-    document.getElementById('modal-overlay').hidden = true;
+    const overlay = $('modal-overlay');
+    if (!overlay) return;
+    if (event && event.target !== overlay) return;
+    overlay.hidden = true;
   };
 
   // ── Toggle Switch ──
   App.toggleSwitch = function(id) {
-    const el = document.getElementById(id);
-    el.classList.toggle('on');
+    const el = $(id);
+    if (el) el.classList.toggle('on');
   };
 
   // ── Start Match ──
   App.startMatch = function() {
-    const difficulty = document.getElementById('cfg-difficulty').value;
-    const opponents = document.getElementById('cfg-opponents').value;
-    const stack = document.getElementById('cfg-stack').value;
-    const godMode = document.getElementById('tog-god').classList.contains('on');
-    const coach = document.getElementById('tog-coach').classList.contains('on');
-    const autoReview = document.getElementById('tog-auto-review').classList.contains('on');
-    const record = document.getElementById('tog-record').classList.contains('on');
-
+    try {
+    const diff = $('cfg-difficulty');
+    const opp = $('cfg-opponents');
+    const stk = $('cfg-stack');
+    const god = $('tog-god');
+    const coach = $('tog-coach');
+    const review = $('tog-auto-review');
+    const rec = $('tog-record');
+    if (!diff || !opp || !stk || !god || !coach || !review || !rec) {
+      console.warn('startMatch: missing config elements');
+      return;
+    }
     const params = new URLSearchParams({
-      difficulty,
-      opponents,
-      stack,
-      god: godMode ? '1' : '0',
-      coach: coach ? '1' : '0',
-      autoReview: autoReview ? '1' : '0',
-      record: record ? '1' : '0',
+      difficulty: diff.value,
+      opponents: opp.value,
+      stack: stk.value,
+      god: god.classList.contains('on') ? '1' : '0',
+      coach: coach.classList.contains('on') ? '1' : '0',
+      autoReview: review.classList.contains('on') ? '1' : '0',
+      record: rec.classList.contains('on') ? '1' : '0',
     });
-
     window.location.href = 'game.html?' + params.toString();
+    } catch(e) { console.warn('startMatch error:', e); }
   };
 
   // ── Quick Resume ──
@@ -312,25 +327,38 @@
 
   // ── Profile Modal ──
   App.editProfile = function() {
+    try {
     const profile = JSON.parse(localStorage.getItem('poker_user_profile') || '{}');
-    document.getElementById('profile-nickname').value = profile.nickname || '';
-    document.getElementById('profile-modal').hidden = false;
+    const input = $('profile-nickname');
+    const modal = $('profile-modal');
+    if (input) input.value = profile.nickname || '';
+    if (modal) modal.hidden = false;
+    } catch(e) { console.warn('editProfile error:', e); }
   };
 
   App.closeProfileModal = function(event) {
-    if (event && event.target !== document.getElementById('profile-modal')) return;
-    document.getElementById('profile-modal').hidden = true;
+    const modal = $('profile-modal');
+    if (!modal) return;
+    if (event && event.target !== modal) return;
+    modal.hidden = true;
   };
 
   App.saveProfile = function() {
-    const nickname = document.getElementById('profile-nickname').value.trim() || '牌手';
+    try {
+    const input = $('profile-nickname');
+    if (!input) return;
+    const nickname = input.value.trim() || '牌手';
     const profile = JSON.parse(localStorage.getItem('poker_user_profile') || '{}');
     profile.nickname = nickname;
     localStorage.setItem('poker_user_profile', JSON.stringify(profile));
 
-    document.getElementById('user-name').textContent = nickname;
-    document.getElementById('avatar-initial').textContent = nickname[0];
-    document.getElementById('profile-modal').hidden = true;
+    const nameEl = $('user-name');
+    const avatarEl = $('avatar-initial');
+    const modal = $('profile-modal');
+    if (nameEl) nameEl.textContent = nickname;
+    if (avatarEl) avatarEl.textContent = nickname[0];
+    if (modal) modal.hidden = true;
+    } catch(e) { console.warn('saveProfile error:', e); }
   };
 
   // ── Boot ──

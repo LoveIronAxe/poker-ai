@@ -159,10 +159,20 @@ window.App = (() => {
       }
     } catch (e) {
       console.error('AI turn error:', e);
-      // Try to recover: skip to next active player or advance phase
+      // Try to recover: skip to next active player
       const legal = E.getLegalActions(game, game.currentIdx);
       if (legal && legal.length > 0) {
-        E.applyAction(game, game.currentIdx, legal[0]);
+        const result = E.applyAction(game, game.currentIdx, legal[0]);
+        if (result === 'hand_over' || game.phase === 'idle') {
+          onHandComplete();
+        } else if (!game.players[game.currentIdx]?.isHuman) {
+          scheduleAITurn();
+        }
+      } else {
+        // If no legal actions, try check/call to advance
+        if (game.phase !== 'idle' && game.phase !== 'showdown') {
+          E.applyAction(game, game.currentIdx, { type: 'check', amount: 0 });
+        }
       }
       refreshUI();
     }
