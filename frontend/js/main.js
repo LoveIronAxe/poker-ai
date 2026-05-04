@@ -122,30 +122,49 @@ window.App = (() => {
     const current = game.players[game.currentIdx];
     if (!current || current.status !== 'active' || current.isHuman) return;
 
-    const action = AI.decide(game, game.currentIdx, aiDifficulty);
-    let resolvedAction = action;
+    try {
+      const action = AI.decide(game, game.currentIdx, aiDifficulty);
+      let resolvedAction = action;
 
-    // Match to legal actions
-    const legal = E.getLegalActions(game, game.currentIdx);
-    const match = legal.find(a => a.type === action.type);
-    if (!match) {
-      resolvedAction = legal[0]; // fallback
-    } else if (action.type === 'raise' || action.type === 'bet') {
-      resolvedAction = match;
-      if (action.amount) {
-        resolvedAction.amount = Math.max(match.min || 0, Math.min(action.amount, match.max || Infinity));
+      // Match to legal actions
+      const legal = E.getLegalActions(game, game.currentIdx);
+      if (!legal || !legal.length) {
+        // No legal actions — skip to next player
+        const result = E.applyAction(game, game.currentIdx, { type: 'fold', amount: 0 });
+        refreshUI();
+        handleActionResult(result.result || result);
+        return;
       }
-    } else {
-      resolvedAction = match;
-    }
+      const match = legal.find(a => a.type === action.type);
+      if (!match) {
+        resolvedAction = legal[0]; // fallback
+      } else if (action.type === 'raise' || action.type === 'bet') {
+        resolvedAction = match;
+        if (action.amount) {
+          resolvedAction.amount = Math.max(match.min || 0, Math.min(action.amount, match.max || Infinity));
+        }
+      } else {
+        resolvedAction = match;
+      }
 
-    const result = E.applyAction(game, game.currentIdx, resolvedAction);
-    refreshUI();
+      if (!resolvedAction) { resolvedAction = legal[0]; }
 
-    if (result === 'hand_over' || game.phase === 'idle') {
-      onHandComplete();
-    } else if (game.players[game.currentIdx] && !game.players[game.currentIdx].isHuman) {
-      scheduleAITurn();
+      const result = E.applyAction(game, game.currentIdx, resolvedAction);
+      refreshUI();
+
+      if (result === 'hand_over' || game.phase === 'idle') {
+        onHandComplete();
+      } else if (game.players[game.currentIdx] && !game.players[game.currentIdx].isHuman) {
+        scheduleAITurn();
+      }
+    } catch (e) {
+      console.error('AI turn error:', e);
+      // Try to recover: skip to next active player or advance phase
+      const legal = E.getLegalActions(game, game.currentIdx);
+      if (legal && legal.length > 0) {
+        E.applyAction(game, game.currentIdx, legal[0]);
+      }
+      refreshUI();
     }
   }
 
@@ -298,12 +317,21 @@ window.App = (() => {
 
     aiDifficulty = difficulty;
 
-    E.saveUserProfile({ nickname, lastUpdated: new Date().toISOString() });
+    // Merge profile instead of overwriting
+    const existing = E.getUserProfile();
+    existing.nickname = nickname;
+    existing.lastUpdated = new Date().toISOString();
+    E.saveUserProfile(existing);
     E.saveAPIConfig({ url: apiUrl, key: apiKey });
 
-    if (nickname) {
+    if (nickname && humanIdx >= 0) {
       game.players[humanIdx].name = nickname;
     }
+
+    // Auto-close settings panel
+    settingsVisible = false;
+    const panel = document.getElementById('settings-panel');
+    if (panel) panel.classList.remove('visible');
 
     UI.showToast('设置已保存', 2000);
     refreshUI();

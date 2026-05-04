@@ -175,8 +175,11 @@ window.PokerUI = (() => {
 
   function renderActionButtons(game) {
     const humanPlayer = game.players.find(p => p.isHuman);
+    const humanIdx = game.players.indexOf(humanPlayer);
+    // Deactivate buttons if: no human, human can't act, game inactive, or NOT human's turn
     if (!humanPlayer || humanPlayer.status !== 'active' ||
-        game.phase === 'idle' || game.phase === 'showdown') {
+        game.phase === 'idle' || game.phase === 'showdown' ||
+        game.currentIdx !== humanIdx) {
       disableAllButtons();
       return;
     }
