@@ -14,6 +14,7 @@ window.App = (() => {
   let humanIdx = 0;
   let aiDifficulty = AI.DIFFICULTY.MEDIUM;
   let reviewVisible = false;
+  let coachVisible = false;
   let settingsVisible = false;
   let autoPlayTimer = null;
 
@@ -48,12 +49,19 @@ window.App = (() => {
     // Apply god mode if configured
     if (godMode) {
       UI.toggleGodMode();
+      const sbBtn = document.getElementById('sb-btn-god');
+      if (sbBtn) sbBtn.classList.add('active');
     }
 
-    // Show coach badge if active
-    if (coachMode && document.getElementById('god-mode-bar')) {
-      document.getElementById('god-mode-bar').textContent = '🎓 AI 教练模式 — 实时提示 & 胜率分析';
-      document.getElementById('god-mode-bar').style.display = 'block';
+    // Apply coach mode if configured
+    if (coachMode) {
+      coachVisible = true;
+      const sbBtn = document.getElementById('sb-btn-coach');
+      if (sbBtn) sbBtn.classList.add('active');
+      if (document.getElementById('god-mode-bar')) {
+        document.getElementById('god-mode-bar').textContent = '🎓 AI 教练模式 — 实时提示 & 胜率分析';
+        document.getElementById('god-mode-bar').className = 'info-bar coach visible';
+      }
     }
 
     newHand();
@@ -189,7 +197,6 @@ window.App = (() => {
   }
 
   function onHandComplete() {
-    // Always generate review and attach to history
     const review = Review.reviewHand(game, humanIdx);
     E.attachReviewToHistory(review);
 
@@ -199,6 +206,17 @@ window.App = (() => {
     }
     Timeline.render(game);
     UI.showToast('本局结束 — 点击复盘查看分析', 3000);
+
+    if (coachVisible) {
+      const grade = review.grade;
+      if (grade === 'S' || grade === 'A') {
+        addCoachMessage('tip', '本局回顾', '评分 ' + review.totalScore + ' (' + grade + ') — 表现出色！继续保持你的打法。');
+      } else if (grade === 'B') {
+        addCoachMessage('tip', '本局回顾', '评分 ' + review.totalScore + ' (B) — 不错，查看复盘了解哪里可以改进。');
+      } else {
+        addCoachMessage('warning', '本局回顾', '评分 ' + review.totalScore + ' (' + grade + ') — 有改进空间，打开复盘面板查看详情。');
+      }
+    }
   }
 
   // ── Rewind System ──
@@ -234,7 +252,99 @@ window.App = (() => {
   // ── God Mode ──
   function toggleGodMode() {
     UI.toggleGodMode();
+    // Sync sidebar button
+    const sbBtn = document.getElementById('sb-btn-god');
+    if (sbBtn) sbBtn.classList.toggle('active', UI.isGodMode());
     refreshUI();
+  }
+
+  // ── Coach Mode ──
+  function toggleCoachMode() {
+    coachVisible = !coachVisible;
+    const sbBtn = document.getElementById('sb-btn-coach');
+    if (sbBtn) sbBtn.classList.toggle('active', coachVisible);
+    const section = document.getElementById('coach-chat-section');
+    if (section) section.style.display = coachVisible ? '' : 'none';
+
+    if (coachVisible) {
+      addCoachMessage('tip', 'AI 教练已开启', '我会在每一步给出建议和胜率分析');
+      UI.showToast('AI 教练模式已开启', 2000);
+      refreshUI();
+    } else {
+      UI.showToast('AI 教练模式已关闭', 1500);
+    }
+  }
+
+  function addCoachMessage(type, title, msg) {
+    const container = document.getElementById('coach-messages');
+    if (!container) return;
+    const empty = container.querySelector('.coach-empty');
+    if (empty) empty.remove();
+    const bubble = document.createElement('div');
+    bubble.className = 'coach-bubble ' + (type || 'tip');
+    bubble.innerHTML = '<strong>' + title + '</strong>' + msg;
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+    while (container.children.length > 20) container.firstChild.remove();
+  }
+
+  function updateSidebar() {
+    if (!game) return;
+    const profile = E.getUserProfile();
+    const nameEl = document.getElementById('sidebar-name');
+    const avatarEl = document.getElementById('sidebar-avatar');
+    if (nameEl) nameEl.textContent = profile.nickname || '牌手';
+    if (avatarEl) avatarEl.textContent = (profile.nickname || 'P')[0];
+    const history = E.getHandHistory();
+    const totalHands = history.length;
+    const ssHands = document.getElementById('ss-hands');
+    const ssScore = document.getElementById('ss-score');
+    const ssSummary = document.getElementById('sidebar-stats-summary');
+    if (ssHands) ssHands.textContent = totalHands;
+    if (ssSummary) ssSummary.textContent = totalHands > 0 ? totalHands + ' 局训练记录' : '暂无数据';
+    let totalScore = 0, scoreCount = 0;
+    history.forEach(h => {
+      if (h.review && typeof h.review.totalScore === 'number') { totalScore += h.review.totalScore; scoreCount++; }
+    });
+    if (ssScore) ssScore.textContent = scoreCount > 0 ? (totalScore / scoreCount).toFixed(0) : '--';
+  }
+
+  function generateCoachAdvice() {
+    const human = game.players.find(p => p.isHuman);
+    if (!human || !human.holeCards.length) return;
+    const legal = E.getLegalActions(game, humanIdx);
+    const equity = E.quickEquity ? E.quickEquity(human.holeCards, game.communityCards) : null;
+    const posName = AI.getPosName ? AI.getPosName(game, humanIdx) : '';
+    const posMult = AI.getPosMult ? AI.getPosMult(game, humanIdx) : 1;
+
+    const phaseKey = game.phase + '-' + game.round;
+    if (window._lastCoachPhase === phaseKey) return;
+    window._lastCoachPhase = phaseKey;
+
+    if (game.phase === 'preflop' && posMult > 1.1) {
+      addCoachMessage('tip', '位置优势', '你在' + posName + '位，可以更积极地游戏。后位可以玩更宽的范围。');
+    } else if (game.phase === 'preflop' && posMult < 0.95) {
+      addCoachMessage('warning', '位置劣势', '你在' + posName + '位，建议收紧范围，只玩强牌。');
+    }
+
+    if (equity) {
+      if (equity.strength > 70) {
+        addCoachMessage('tip', '牌力领先', '当前牌力约' + equity.strength + '%，可以激进下注建立底池。');
+      } else if (equity.strength > 45) {
+        addCoachMessage('tip', '中等牌力', '牌力约' + equity.strength + '%，考虑控池或小注。避免过度投入。');
+      } else if (equity.strength > 0 && legal.some(a => a.type === 'check')) {
+        addCoachMessage('warning', '牌力较弱', '当前胜率不足，谨慎面对加注。考虑过牌或弃牌。');
+      }
+    }
+
+    const callAction = legal.find(a => a.type === 'call');
+    if (callAction && callAction.amount > 0 && equity) {
+      const pot = game.players.reduce((s, p) => s + p.currentBet, 0);
+      const potOdds = callAction.amount / (pot + callAction.amount);
+      if (potOdds < 0.25 && equity.strength > 33) {
+        addCoachMessage('tip', '赔率合适', '跟注赔率' + (potOdds * 100).toFixed(0) + '%，这个价格值得一搏。');
+      }
+    }
   }
 
   // ── Review ──
@@ -269,7 +379,7 @@ window.App = (() => {
   }
 
   function createSettingsPanel() {
-    const app = document.getElementById('app');
+    const main = document.getElementById('main-content') || document.getElementById('app');
     const panel = document.createElement('div');
     panel.id = 'settings-panel';
     panel.className = settingsVisible ? 'visible' : '';
@@ -278,7 +388,7 @@ window.App = (() => {
     const apiConfig = E.getAPIConfig();
 
     panel.innerHTML = `
-      <h3 style="color:var(--neon-cyan);margin-bottom:12px">⚙️ 设置</h3>
+      <h3 style="color:var(--amber);margin-bottom:12px;font-size:0.9rem">⚙️ 设置</h3>
 
       <div class="settings-group">
         <label>玩家昵称</label>
@@ -309,14 +419,13 @@ window.App = (() => {
         <button class="btn" onclick="App.toggleSettings()">关闭</button>
       </div>
 
-      <div style="margin-top:12px;font-size:0.7rem;color:var(--text-dim)">
+      <div style="margin-top:12px;font-size:0.7rem;color:var(--text-tertiary)">
         牌局历史和设置自动保存在浏览器本地存储中
       </div>
     `;
 
-    // Insert after header
-    const header = document.querySelector('.header');
-    header.after(panel);
+    // Insert at top of main content
+    main.insertBefore(panel, main.firstChild);
   }
 
   function saveSettings() {
@@ -363,25 +472,26 @@ window.App = (() => {
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'history-panel';
-      document.getElementById('app').appendChild(panel);
+      const main = document.getElementById('main-content') || document.getElementById('app');
+      main.appendChild(panel);
     }
     panel.classList.add('visible');
 
     if (history.length === 0) {
-      panel.innerHTML = '<div style="padding:16px;color:var(--text-dim)">暂无牌局历史</div>';
+      panel.innerHTML = '<div style="padding:16px;color:var(--text-tertiary)">暂无牌局历史</div>';
       return;
     }
 
-    panel.innerHTML = `<h3 style="color:var(--neon-cyan);margin-bottom:8px">📜 牌局历史 (${history.length}局)</h3>`;
+    panel.innerHTML = `<h3 style="color:var(--amber);margin-bottom:8px;font-size:0.9rem">📜 牌局历史 (${history.length}局)</h3>`;
     for (const h of history.slice(0, 20)) {
       const date = new Date(h.date).toLocaleDateString('zh-CN');
       const time = new Date(h.date).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
       const humanPlayer = h.players.find(p => p.isHuman);
       const won = h.winners && humanPlayer && h.winners.includes(h.players.indexOf(humanPlayer));
       panel.innerHTML += `
-        <div class="history-item" style="${won ? 'border-left:3px solid var(--neon-green)' : ''}">
-          <span>#${h.handNumber} <span style="color:var(--text-dim);font-size:0.65rem">${date} ${time}</span></span>
-          <span style="color:${won ? 'var(--neon-green)' : 'var(--text-dim)'}">底池: ${h.pot} ${won ? '🏆 赢了!' : ''}</span>
+        <div class="history-item" style="${won ? 'border-left:3px solid var(--green)' : ''}">
+          <span>#${h.handNumber} <span style="color:var(--text-tertiary);font-size:0.65rem">${date} ${time}</span></span>
+          <span style="color:${won ? 'var(--green)' : 'var(--text-tertiary)'}">底池: ${h.pot} ${won ? '🏆 赢了!' : ''}</span>
         </div>
       `;
     }
@@ -392,18 +502,26 @@ window.App = (() => {
     if (!game) return;
     UI.renderTable(game);
     Timeline.render(game);
+    updateSidebar();
     if (reviewVisible && game.phase === 'idle') {
       const review = Review.reviewHand(game, humanIdx);
       Review.renderReview(review);
       Review.drawRadar('radar-canvas', review.dimensions);
+    }
+    // Generate coach advice on human's turn
+    if (coachVisible && game.phase !== 'idle' && game.phase !== 'showdown') {
+      const human = game.players.find(p => p.isHuman);
+      if (human && human.status === 'active' && game.currentIdx === game.players.indexOf(human)) {
+        generateCoachAdvice();
+      }
     }
   }
 
   // ── Exports ──
   return {
     init, newHand, playerAction, updateBetSlider,
-    rewindTo, toggleGodMode, toggleReview, toggleSettings,
-    saveSettings, showHistory, refreshUI,
+    rewindTo, toggleGodMode, toggleCoachMode, toggleReview, toggleSettings,
+    saveSettings, showHistory, refreshUI, addCoachMessage,
   };
 })();
 

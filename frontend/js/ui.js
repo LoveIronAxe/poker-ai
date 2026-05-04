@@ -161,7 +161,7 @@ window.PokerUI = (() => {
 
   function renderGodModeBar() {
     const bar = getEl('god-mode-bar');
-    bar.className = godMode ? 'visible' : '';
+    bar.className = godMode ? 'info-bar visible' : 'info-bar';
   }
 
   function isGodMode() { return godMode; }

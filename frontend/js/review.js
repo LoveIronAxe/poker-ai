@@ -6,11 +6,11 @@ window.PokerReview = (() => {
   const E = window.PokerEngine;
 
   const DIMENSIONS = [
-    { key: 'range', name: '范围选择', color: '#00ff88', weight: 1.0 },
-    { key: 'position', name: '位置利用', color: '#00f0ff', weight: 0.9 },
-    { key: 'odds', name: '赔率数学', color: '#ffd700', weight: 0.9 },
-    { key: 'aggression', name: '侵略平衡', color: '#ff9933', weight: 0.8 },
-    { key: 'mental', name: '心理博弈', color: '#b44dff', weight: 0.7 },
+    { key: 'range', name: '范围选择', color: '#f59e0b', weight: 1.0 },
+    { key: 'position', name: '位置利用', color: '#22c55e', weight: 0.9 },
+    { key: 'odds', name: '赔率数学', color: '#06b6d4', weight: 0.9 },
+    { key: 'aggression', name: '侵略平衡', color: '#f97316', weight: 0.8 },
+    { key: 'mental', name: '心理博弈', color: '#a855f7', weight: 0.7 },
   ];
 
   function reviewHand(game, humanIdx) {
