@@ -209,9 +209,10 @@ window.PokerEngine = (() => {
       events: [],
     };
     for (let i = 0; i < numPlayers; i++) {
+      const s = Array.isArray(stacks) ? (stacks[i] || 1000) : (stacks || 1000);
       g.players.push({
         id: i, name: i === 0 ? '你' : `AI-${i}`,
-        stack: stacks || 1000, holeCards: [], currentBet: 0, roundBet: 0,
+        stack: s, holeCards: [], currentBet: 0, roundBet: 0,
         status: 'waiting', // waiting|active|folded|allin|out
         lastAction: '', isHuman: i === 0
       });
@@ -514,12 +515,13 @@ window.PokerEngine = (() => {
   }
 
   function endHand(g) {
+    const totalPot = g.players.reduce((s, p) => s + p.currentBet, 0);
     const winner = g.players.find(p => p.status !== 'folded' && p.status !== 'out');
     if (winner) {
-      const totalPot = g.players.reduce((s, p) => s + p.currentBet, 0);
       winner.stack += totalPot;
       g.events.push({ type: 'result', winners: [winner.id], pot: totalPot, reason: 'all_folded' });
     }
+    saveHandToHistory(g, [], winner ? [winner] : [], totalPot);
     g.phase = 'idle';
   }
 

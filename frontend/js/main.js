@@ -29,7 +29,7 @@ window.App = (() => {
     const coachMode = params.get('coach') === '1';
     const autoReview = params.get('autoReview') === '1';
 
-    // Auto-enable review if autoReview is set
+    // Keep auto-review setting across newHand calls
     if (autoReview) reviewVisible = true;
 
     // Load saved profile
@@ -37,7 +37,7 @@ window.App = (() => {
 
     // Create game with configured settings
     const stacks = Array(numPlayers).fill(stackSize);
-    game = E.createGame(numPlayers, 1, aiDifficulty, stacks);
+    game = E.createGame(numPlayers, 1, 2, stacks);
     game.players[0].isHuman = true;
     game.players[0].name = (E.getUserProfile().nickname) || '你';
     const aiNames = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India'];
@@ -47,7 +47,7 @@ window.App = (() => {
 
     // Apply god mode if configured
     if (godMode) {
-      setTimeout(() => UI.toggleGodMode(), 500);
+      UI.toggleGodMode();
     }
 
     // Show coach badge if active
@@ -64,12 +64,16 @@ window.App = (() => {
     const started = E.startNewHand(game);
     if (!started) {
       UI.showToast('游戏结束！重新开始');
-      game = E.createGame(6, 1, 2, [1000, 1000, 1000, 1000, 1000, 1000]);
+      const n = game.numPlayers;
+      const stacks = Array(n).fill(1000);
+      game = E.createGame(n, 1, 2, stacks);
       game.players[0].isHuman = true;
-      game.players[0].name = '你';
+      game.players[0].name = (E.getUserProfile().nickname) || '你';
+      for (let i = 1; i < n; i++) {
+        game.players[i].name = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India'][i-1] || `AI-${i}`;
+      }
       E.startNewHand(game);
     }
-    reviewVisible = false;
     document.getElementById('review-panel').classList.remove('visible');
     humanIdx = game.players.findIndex(p => p.isHuman);
     refreshUI();

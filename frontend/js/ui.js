@@ -175,7 +175,8 @@ window.PokerUI = (() => {
 
   function renderActionButtons(game) {
     const humanPlayer = game.players.find(p => p.isHuman);
-    if (!humanPlayer || humanPlayer.status !== 'active') {
+    if (!humanPlayer || humanPlayer.status !== 'active' ||
+        game.phase === 'idle' || game.phase === 'showdown') {
       disableAllButtons();
       return;
     }
