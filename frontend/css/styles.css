@@ -190,19 +190,13 @@ html, body {
   background: radial-gradient(ellipse at center, #1a3a2a 0%, #0f2218 55%, #08120d 100%);
   border-radius: 50%;
   border: 2px solid hsla(210, 40%, 98%, 0.06);
-  flex: 1;
-  margin: 8px auto;
-  width: calc(100% - 16px);
-  max-width: 640px;
-  min-height: 0;
+  flex: 0 0 auto;
+  margin: auto;
   box-shadow: 0 0 80px rgba(0,0,0,0.6), inset 0 0 50px rgba(0,0,0,0.4);
   overflow: hidden;
 }
 @media (max-width: 500px) {
-  #table-container { border-radius: 30%; border-radius: 35%; }
-}
-@media (max-height: 700px) {
-  #table-container { margin: 2px auto; }
+  #table-container { border-radius: 35%; }
 }
 
 /* Community + pot */

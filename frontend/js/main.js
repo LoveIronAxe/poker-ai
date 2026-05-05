@@ -16,7 +16,25 @@ window.App = (() => {
   let autoPlayTimer = null;
   let coachMode = false;
 
-  // ── Init ──
+  // ── AI Name Pool ──
+  const AI_NAME_POOL = [
+    '鲨鱼', '老鹰', '黑猫', '银狐', '猎豹', '毒蛇', '乌鸦', '山猫',
+    '红桃K', '方块Q', '草花J', '黒桃A',
+    '大盲王', '小盲圣', '枪口侠', '庄位帝',
+    '诈唬大师', '跟注站', '紧凶王', '松凶怪',
+    '算牌器', '德州迷', '河牌鱼', '翻牌精',
+    'All-in狂', '慢打王', '偷盲贼', '价值怪',
+    '暴风雨', '幸运星', '暗夜', '极光', '龙卷风',
+    '冷面', '铁壁', '幻影', '剃刀', '黑曜石',
+    '蓝月', '赤潮', '雷霆', '闪电', '冰川',
+    '太极', '无极', '求败', '独孤', '不败',
+    '老千', '赌神', '雀圣', '赌侠',
+  ];
+
+  function pickAINames(count) {
+    const shuffled = [...AI_NAME_POOL].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }
   function init() {
     const params = new URLSearchParams(window.location.search);
 
@@ -39,9 +57,9 @@ window.App = (() => {
     game = E.createGame(numPlayers, 1, 2, stacks);
     game.players[0].isHuman = true;
     game.players[0].name = (E.getUserProfile().nickname) || '你';
-    const aiNames = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India'];
+    const names = pickAINames(numPlayers - 1);
     for (let i = 1; i < numPlayers; i++) {
-      game.players[i].name = aiNames[i - 1] || `AI-${i}`;
+      game.players[i].name = names[i - 1] || `牌手${i}`;
     }
 
     // Default god mode ON
@@ -82,8 +100,9 @@ window.App = (() => {
       game = E.createGame(n, 1, 2, stacks);
       game.players[0].isHuman = true;
       game.players[0].name = (E.getUserProfile().nickname) || '你';
+      const names = pickAINames(n - 1);
       for (let i = 1; i < n; i++) {
-        game.players[i].name = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India'][i-1] || `AI-${i}`;
+        game.players[i].name = names[i - 1] || `牌手${i}`;
       }
       E.startNewHand(game);
     }
@@ -132,7 +151,17 @@ window.App = (() => {
   function executeAITurn() {
     if (!game || game.phase === 'idle' || game.phase === 'showdown') return;
     const current = game.players[game.currentIdx];
-    if (!current || current.status !== 'active' || current.isHuman) return;
+    if (!current || current.status !== 'active' || current.isHuman) {
+      // Advance to next active player if current can't act
+      if (current && !current.isHuman && current.status !== 'active') {
+        const next = E.nextCanAct(game, game.currentIdx);
+        if (next >= 0) {
+          game.currentIdx = next;
+          scheduleAITurn();
+        }
+      }
+      return;
+    }
 
     try {
       let resolvedAction = null;

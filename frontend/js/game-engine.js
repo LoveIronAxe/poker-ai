@@ -291,6 +291,16 @@ window.PokerEngine = (() => {
     return fromIdx;
   }
 
+  // Find next player who can act (status === 'active') — used post-street
+  function nextCanAct(g, fromIdx) {
+    const n = g.players.length;
+    for (let off = 1; off <= n; off++) {
+      const idx = (fromIdx + off) % n;
+      if (g.players[idx].status === 'active') return idx;
+    }
+    return -1; // no one can act
+  }
+
   // ── Actions ──
   function getLegalActions(g, playerIdx) {
     const p = g.players[playerIdx];
@@ -457,8 +467,8 @@ window.PokerEngine = (() => {
     g.actionsThisRound = [];
     g.playersActed = new Set();
 
-    // First to act after dealer (postflop)
-    const first = nextActive(g, g.dealerIdx);
+    // First to act after dealer (postflop) — must be an active player
+    const first = nextCanAct(g, g.dealerIdx);
     g.currentIdx = first;
 
     // If only one can act, skip
@@ -639,7 +649,7 @@ window.PokerEngine = (() => {
     cardStr, cardKey, isRed, makeDeck, shuffle,
     evaluate, eval5Cards, compareHands, quickEquity, detectDraws,
     createGame, startNewHand, getLegalActions, applyAction,
-    advancePhase, showdown, endHand, nextActive,
+    advancePhase, showdown, endHand, nextActive, nextCanAct,
     saveSnapshot, restoreSnapshot,
     saveHandToHistory, getHandHistory,
     attachReviewToHistory,

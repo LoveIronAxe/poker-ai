@@ -10,12 +10,36 @@ window.PokerUI = (() => {
   function getEl(id) { return document.getElementById(id); }
 
   function renderTable(game) {
+    sizeTableContainer();
     renderCommunityCards(game);
     renderSeats(game);
     renderPot(game);
     renderPhaseDots(game);
     renderGodModeBar();
     renderActionButtons(game);
+  }
+
+  function sizeTableContainer() {
+    const tableEl = getEl('table-container');
+    if (!tableEl) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Available space minus chrome (top bar ~40, phase ~20, god ~30, action ~60, margins ~20)
+    const availH = vh - 180;
+    const maxW = vw > 1024 ? 700 : 640;
+    const w = Math.min(vw - 16, maxW);
+    // Poker table oval: width ~1.45x height
+    let h = Math.round(w / 1.45);
+    if (h > availH) {
+      h = availH;
+    }
+    if (vw < 500) {
+      h = Math.round(w / 1.3);
+    }
+    tableEl.style.width = w + 'px';
+    tableEl.style.height = h + 'px';
+    tableEl.style.flex = '0 0 auto';
+    tableEl.style.margin = 'auto';
   }
 
   function renderCommunityCards(game) {
