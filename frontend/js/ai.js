@@ -1,5 +1,5 @@
 // ============================================================
-// ai.js — AI opponent using strategy from Python backend
+// ai.js — AI opponent strategy (JS)
 // ============================================================
 window.PokerAI = (() => {
   'use strict';
@@ -15,104 +15,148 @@ window.PokerAI = (() => {
     const strength = E.quickEquity(p.holeCards, game.communityCards);
     const draws = E.detectDraws(p.holeCards, game.communityCards);
     const posName = getPosName(game, playerIdx);
-    const livePot = game.players.reduce((s, p) => s + p.currentBet, 0) || game.sb + game.bb;
+    const livePot = game.players.reduce((sum, pl) => sum + pl.currentBet, 0) || game.sb + game.bb;
 
-    const s = strength.strength * getPosMult(posName);
+    const rawS = strength.strength;
+    const s = rawS * getPosMult(posName);
 
     const can = {};
     for (const a of legal) can[a.type] = a;
 
+    const isPremium = rawS >= 78;
+    const toCall = game.currentBet - p.roundBet;
+    const isPreflop = game.phase === 'preflop';
+
     if (difficulty <= DIFFICULTY.EASY) {
-      return basicDecision(s, can, legal, livePot, game, p);
+      return basicDecision(s, can, legal, livePot, game, p, isPremium, toCall);
     } else if (difficulty <= DIFFICULTY.MEDIUM) {
-      return mediumDecision(s, can, legal, livePot, game, p, draws, posName);
+      return mediumDecision(s, can, legal, livePot, game, p, draws, posName, isPremium, toCall, isPreflop);
     } else {
-      return hardDecision(s, can, legal, livePot, game, p, draws, posName, strength);
+      return hardDecision(s, can, legal, livePot, game, p, draws, posName, strength, isPremium, toCall, isPreflop);
     }
   }
 
-  function basicDecision(s, can, legal, pot, game, p) {
-    if (s >= 80) {
+  // ── Easy AI ──
+  function basicDecision(s, can, legal, pot, game, p, isPremium, toCall) {
+    // Premium hands: always raise or call, NEVER fold
+    if (isPremium) {
       if (can.raise) return can.raise;
       if (can.bet) return can.bet;
-      if (can.check) return can.check;
       if (can.call) return can.call;
-    } else if (s >= 55) {
+      if (can.check) return can.check;
+      return legal[0];
+    }
+
+    if (s >= 65) {
+      if (can.raise) return can.raise;
       if (can.bet) return can.bet;
-      if (can.check) return can.check;
-      if (can.call && can.call.amount <= pot * 0.3) return can.call;
-      if (can.fold) return can.fold;
-    } else {
-      if (can.check) return can.check;
-      if (can.fold) return can.fold;
-    }
-    return legal[0];
-  }
-
-  function mediumDecision(s, can, legal, pot, game, p, draws, pos) {
-    const toCall = game.currentBet - p.roundBet;
-    // Don't re-raise too much
-    const raiseCount = game.events.filter(e => e.type === 'action' &&
-      (e.action.type === 'raise' || e.action.type === 'bet')).length;
-
-    if (s >= 78) {
-      if (can.raise && raiseCount < 6) {
-        const amt = validRaise(game, p, pot);
-        return { type: 'raise', amount: amt };
-      }
-      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.66) };
-      if (can.check && Math.random() < 0.12) return can.check; // trap
       if (can.call) return can.call;
-      return can.check || legal[0];
-    } else if (s >= 55) {
-      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.5) };
-      if (can.raise && draws.length > 0) {
-        return { type: 'raise', amount: validRaise(game, p, pot) };
-      }
       if (can.check) return can.check;
-      if (can.call && toCall <= pot * 0.25) return can.call;
-      return can.fold || can.check || legal[0];
-    } else if (s >= 35) {
-      if (can.bet && Math.random() < 0.2 && ['btn','co','hj'].includes(pos)) {
-        return { type: 'bet', amount: validBet(game, pot, 0.4) };
-      }
+    } else if (s >= 40) {
+      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.4) };
       if (can.check) return can.check;
-      if (can.call && toCall <= pot * 0.15) return can.call;
-      return can.fold || legal[0];
+      if (can.call && toCall <= pot * 0.5) return can.call;
+      if (can.call) return can.call;
+      if (can.fold && toCall > pot * 1.2) return can.fold;
     } else {
       if (can.check) return can.check;
-      return can.fold || legal[0];
+      if (can.call && toCall <= pot * 0.2) return can.call;
+      if (can.raise && Math.random() < 0.08) return can.raise;
+      if (can.fold && toCall > 0) return can.fold;
+      if (can.call) return can.call;
     }
+    return can.check || can.call || legal[0];
   }
 
-  function hardDecision(s, can, legal, pot, game, p, draws, pos, strength) {
-    const toCall = game.currentBet - p.roundBet;
+  // ── Medium AI ──
+  function mediumDecision(s, can, legal, pot, game, p, draws, pos, isPremium, toCall, isPreflop) {
     const raiseCount = game.events.filter(e => e.type === 'action' &&
       (e.action.type === 'raise' || e.action.type === 'bet')).length;
 
-    // Mixed strategy
-    if (s >= 80) {
-      if (Math.random() < 0.15 && can.check && game.phase === 'flop') return can.check;
+    // Premium: never fold, play aggressively
+    if (isPremium) {
       if (can.raise && raiseCount < 8) {
         return { type: 'raise', amount: validRaise(game, p, pot) };
       }
       if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.7) };
+      if (can.check && Math.random() < 0.10) return can.check;
       if (can.call) return can.call;
       return can.check || legal[0];
     }
 
-    // Semi-bluff draws
-    if (draws.length > 0 && (strength.rank || 1) <= 4) {
-      const totalOuts = draws.reduce((s, d) => s + d.outs, 0);
-      if (totalOuts >= 12 && can.raise) {
+    if (s >= 65) {
+      if (can.raise && raiseCount < 5) {
         return { type: 'raise', amount: validRaise(game, p, pot) };
       }
-      if (totalOuts >= 8 && Math.random() < 0.55 && can.bet) {
-        return { type: 'bet', amount: validBet(game, pot, 0.55) };
+      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.55) };
+      if (can.call) return can.call;
+      if (can.check) return can.check;
+    } else if (s >= 45) {
+      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.45) };
+      if (can.raise && draws.length > 0 && raiseCount < 3) {
+        return { type: 'raise', amount: validRaise(game, p, pot) };
+      }
+      if (can.check) return can.check;
+      if (can.call && toCall <= pot * 0.45) return can.call;
+      if (can.call) return can.call;
+      return can.fold || can.check || legal[0];
+    } else if (s >= 30) {
+      if (can.bet && Math.random() < 0.25 && ['btn','co','hj'].includes(pos)) {
+        return { type: 'bet', amount: validBet(game, pot, 0.35) };
+      }
+      if (can.check) return can.check;
+      if (can.call && toCall <= pot * 0.3) return can.call;
+      if (can.call) return can.call;
+      return can.fold || legal[0];
+    } else {
+      if (can.check) return can.check;
+      if (can.call && toCall <= pot * 0.15) return can.call;
+      // Blind defense
+      if (can.call && (pos === 'bb' || pos === 'sb') && toCall <= pot * 0.3) return can.call;
+      // Occasional bluff from late position
+      if (can.raise && Math.random() < 0.06 && ['btn','co'].includes(pos)) {
+        return { type: 'raise', amount: validRaise(game, p, pot) };
+      }
+      if (can.fold) return can.fold;
+      return can.call || legal[0];
+    }
+  }
+
+  // ── Hard AI ──
+  function hardDecision(s, can, legal, pot, game, p, draws, pos, strength, isPremium, toCall, isPreflop) {
+    const raiseCount = game.events.filter(e => e.type === 'action' &&
+      (e.action.type === 'raise' || e.action.type === 'bet')).length;
+
+    // Premium: play fast but can trap
+    if (isPremium) {
+      if (Math.random() < 0.12 && can.check && (game.phase === 'flop' || game.phase === 'turn')) {
+        return can.check;
+      }
+      if (can.raise && raiseCount < 10) {
+        return { type: 'raise', amount: validRaise(game, p, pot) };
+      }
+      if (can.bet) return { type: 'bet', amount: validBet(game, pot, 0.75) };
+      if (can.call) return can.call;
+      return can.check || legal[0];
+    }
+
+    // Semi-bluff with strong draws
+    if (draws.length > 0) {
+      const totalOuts = draws.reduce((sum, d) => sum + d.outs, 0);
+      if (totalOuts >= 12 && can.raise && raiseCount < 6) {
+        return { type: 'raise', amount: validRaise(game, p, pot) };
+      }
+      if (totalOuts >= 8 && Math.random() < 0.5 && can.bet) {
+        return { type: 'bet', amount: validBet(game, pot, 0.5) };
       }
     }
 
-    return mediumDecision(s, can, legal, pot, game, p, draws, pos);
+    // Position-based bluff
+    if (can.bet && Math.random() < 0.18 && ['btn','co'].includes(pos) && s < 50) {
+      return { type: 'bet', amount: validBet(game, pot, 0.4) };
+    }
+
+    return mediumDecision(s, can, legal, pot, game, p, draws, pos, isPremium, toCall, isPreflop);
   }
 
   function validBet(game, pot, pct) {

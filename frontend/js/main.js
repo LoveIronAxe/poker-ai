@@ -15,6 +15,7 @@ window.App = (() => {
   let aiDifficulty = AI.DIFFICULTY.MEDIUM;
   let autoPlayTimer = null;
   let coachMode = false;
+  let fastForwardNotice = false;
 
   // ── AI Name Pool ──
   const AI_NAME_POOL = [
@@ -35,41 +36,42 @@ window.App = (() => {
     const shuffled = [...AI_NAME_POOL].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
   }
+
+  function humanIsActive() {
+    const human = game.players[humanIdx];
+    return human && human.status === 'active';
+  }
+
   function init() {
     const params = new URLSearchParams(window.location.search);
 
     aiDifficulty = parseInt(params.get('difficulty')) || 2;
     const numPlayers = parseInt(params.get('opponents')) || 6;
     const stackSize = parseInt(params.get('stack')) || 1000;
-    // Default god mode ON unless explicitly disabled
     const godMode = params.get('god') !== '0';
     const coach = params.get('coach') === '1';
     const autoReview = params.get('autoReview') === '1';
-    const resume = params.get('resume') === '1';
 
     coachMode = coach;
-
-    // Load saved profile
     loadSettings();
 
     // Create game
     const stacks = Array(numPlayers).fill(stackSize);
     game = E.createGame(numPlayers, 1, 2, stacks);
     game.players[0].isHuman = true;
-    game.players[0].name = (E.getUserProfile().nickname) || '你';
+    const profile = E.getUserProfile();
+    game.players[0].name = profile.nickname || 'Hero';
     const names = pickAINames(numPlayers - 1);
     for (let i = 1; i < numPlayers; i++) {
       game.players[i].name = names[i - 1] || `牌手${i}`;
     }
 
-    // Default god mode ON
     if (godMode) {
       UI.setGodMode(true);
       const btn = document.getElementById('btn-god');
       if (btn) btn.classList.add('active');
     }
 
-    // Coach mode
     if (coachMode) {
       const bar = document.getElementById('god-mode-bar');
       if (bar) {
@@ -78,17 +80,13 @@ window.App = (() => {
       }
     }
 
-    if (resume) {
-      // Try to resume
-    }
-
     newHand();
   }
 
   function newHand() {
     if (autoPlayTimer) { clearTimeout(autoPlayTimer); autoPlayTimer = null; }
+    fastForwardNotice = false;
 
-    // Hide review overlay
     const reviewOverlay = document.getElementById('review-overlay');
     if (reviewOverlay) reviewOverlay.hidden = true;
 
@@ -99,7 +97,8 @@ window.App = (() => {
       const stacks = Array(n).fill(1000);
       game = E.createGame(n, 1, 2, stacks);
       game.players[0].isHuman = true;
-      game.players[0].name = (E.getUserProfile().nickname) || '你';
+      const profile = E.getUserProfile();
+      game.players[0].name = profile.nickname || 'Hero';
       const names = pickAINames(n - 1);
       for (let i = 1; i < n; i++) {
         game.players[i].name = names[i - 1] || `牌手${i}`;
@@ -128,9 +127,8 @@ window.App = (() => {
     const action = legal.find(a => a.type === type);
     if (!action) { UI.showToast('无效操作'); return; }
 
-    if (type === 'raise' || type === 'bet') {
-      const slider = document.getElementById('bet-slider');
-      if (slider) action.amount = parseInt(slider.value) || action.min;
+    if (type === 'allin') {
+      action.amount = human.stack;
     }
 
     const result = E.applyAction(game, game.players.indexOf(human), action);
@@ -138,21 +136,122 @@ window.App = (() => {
     handleActionResult(result);
   }
 
-  function updateBetSlider() {
-    UI.updateBetSlider();
+  // ── Bet Action (2x, 3x, 4x) ──
+  function betAction(multiplier) {
+    if (!game || game.phase === 'idle' || game.phase === 'showdown') return;
+    const human = game.players.find(p => p.isHuman);
+    if (!human || human.status !== 'active') return;
+    if (game.currentIdx !== game.players.indexOf(human)) return;
+
+    const legal = E.getLegalActions(game, game.players.indexOf(human));
+    const toCall = game.currentBet - human.roundBet;
+    const canBet = legal.find(a => a.type === 'bet');
+    const canRaise = legal.find(a => a.type === 'raise');
+
+    if (toCall === 0) {
+      if (!canBet) { UI.showToast('当前无法下注'); return; }
+      const pot = game.players.reduce((s, p) => s + p.currentBet, 0);
+      let amount = Math.floor(pot * multiplier);
+      amount = Math.max(canBet.min || game.bb, Math.min(amount, canBet.max || human.stack));
+      const action = { type: 'bet', amount };
+      const result = E.applyAction(game, game.players.indexOf(human), action);
+      refreshUI();
+      handleActionResult(result);
+    } else {
+      if (!canRaise) {
+        playerAction(toCall >= human.stack ? 'allin' : 'call');
+        return;
+      }
+      const pot = game.players.reduce((s, p) => s + p.currentBet, 0);
+      let amount = Math.floor(pot * multiplier);
+      const minRaise = canRaise.min || (game.currentBet + game.lastRaise - human.roundBet);
+      amount = Math.max(minRaise, Math.min(amount, canRaise.max || human.stack));
+      const action = { type: 'raise', amount };
+      const result = E.applyAction(game, game.players.indexOf(human), action);
+      refreshUI();
+      handleActionResult(result);
+    }
+  }
+
+  // ── Custom Bet Modal ──
+  function openCustomBet() {
+    if (!game || game.phase === 'idle' || game.phase === 'showdown') return;
+    const human = game.players.find(p => p.isHuman);
+    if (!human || human.status !== 'active') return;
+    if (game.currentIdx !== game.players.indexOf(human)) return;
+
+    const overlay = document.getElementById('custom-bet-overlay');
+    const input = document.getElementById('custom-bet-amount');
+    if (!overlay || !input) return;
+
+    const legal = E.getLegalActions(game, game.players.indexOf(human));
+    const canBet = legal.find(a => a.type === 'bet');
+    const canRaise = legal.find(a => a.type === 'raise');
+    const toCall = game.currentBet - human.roundBet;
+    let defaultVal = game.minRaise;
+    if (canRaise) defaultVal = canRaise.min || game.minRaise;
+    else if (canBet) defaultVal = canBet.min || game.bb;
+    else defaultVal = toCall > 0 ? toCall : game.bb;
+
+    input.value = defaultVal;
+    input.min = 1;
+    input.max = human.stack;
+    overlay.hidden = false;
+  }
+
+  function closeCustomBet(event) {
+    if (event && event.target !== document.getElementById('custom-bet-overlay')) return;
+    const overlay = document.getElementById('custom-bet-overlay');
+    if (overlay) overlay.hidden = true;
+  }
+
+  function confirmCustomBet() {
+    const input = document.getElementById('custom-bet-amount');
+    if (!input) return;
+    const amount = parseInt(input.value) || 0;
+    closeCustomBet();
+
+    if (!game || game.phase === 'idle' || game.phase === 'showdown') return;
+    const human = game.players.find(p => p.isHuman);
+    if (!human || human.status !== 'active') return;
+    if (game.currentIdx !== game.players.indexOf(human)) return;
+
+    const legal = E.getLegalActions(game, game.players.indexOf(human));
+    const toCall = game.currentBet - human.roundBet;
+
+    let action;
+    if (toCall === 0) {
+      const canBet = legal.find(a => a.type === 'bet');
+      if (!canBet) { UI.showToast('当前无法下注'); return; }
+      action = { type: 'bet', amount: Math.max(canBet.min || 0, Math.min(amount, canBet.max || human.stack)) };
+    } else {
+      const canRaise = legal.find(a => a.type === 'raise');
+      if (canRaise) {
+        const minRaise = canRaise.min || (game.currentBet + game.lastRaise - human.roundBet);
+        action = { type: 'raise', amount: Math.max(minRaise, Math.min(amount, canRaise.max || human.stack)) };
+      } else {
+        playerAction(amount >= human.stack ? 'allin' : 'call');
+        return;
+      }
+    }
+
+    const result = E.applyAction(game, game.players.indexOf(human), action);
+    refreshUI();
+    handleActionResult(result);
   }
 
   // ── AI Turn ──
   function scheduleAITurn() {
     if (autoPlayTimer) clearTimeout(autoPlayTimer);
-    autoPlayTimer = setTimeout(executeAITurn, 500 + Math.random() * 300);
+    // Fast-forward when human is not active (folded or all-in)
+    const delay = humanIsActive() ? (500 + Math.random() * 300) : (150 + Math.random() * 150);
+    autoPlayTimer = setTimeout(executeAITurn, delay);
   }
 
   function executeAITurn() {
     if (!game || game.phase === 'idle' || game.phase === 'showdown') return;
     const current = game.players[game.currentIdx];
     if (!current || current.status !== 'active' || current.isHuman) {
-      // Advance to next active player if current can't act
       if (current && !current.isHuman && current.status !== 'active') {
         const next = E.nextCanAct(game, game.currentIdx);
         if (next >= 0) {
@@ -213,6 +312,11 @@ window.App = (() => {
     if (result === 'hand_over' || game.phase === 'idle') {
       onHandComplete();
     } else if (game.phase !== 'showdown') {
+      // Notify user if they've folded but game continues
+      if (!humanIsActive() && !fastForwardNotice) {
+        fastForwardNotice = true;
+        UI.showToast('你已弃牌 — AI 自动对局中...', 2000);
+      }
       if (game.players[game.currentIdx] && !game.players[game.currentIdx].isHuman) {
         scheduleAITurn();
       }
@@ -222,17 +326,10 @@ window.App = (() => {
   function onHandComplete() {
     const review = Review.reviewHand(game, humanIdx);
     E.attachReviewToHistory(review);
-
-    // Always show review overlay when hand completes
     showReviewOverlay(review);
-
-    // Render timeline (hidden by default but available)
     Timeline.render(game);
-
-    // Show review toggle button
     const btnReview = document.getElementById('btn-review-toggle');
     if (btnReview) btnReview.style.display = '';
-
     UI.showToast('本局结束 — 查看复盘分析', 2500);
 
     if (coachMode) {
@@ -270,6 +367,7 @@ window.App = (() => {
       p.status = 'active';
     }
 
+    fastForwardNotice = false;
     refreshUI();
     UI.showToast(`已回溯到第 ${snapIdx + 1}/${game.history.length} 步`, 2000);
 
@@ -300,7 +398,6 @@ window.App = (() => {
       const review = Review.reviewHand(game, humanIdx);
       showReviewOverlay(review);
     } else {
-      // Show timeline when reviewing during play
       const timelineSection = document.getElementById('timeline-section');
       if (timelineSection) timelineSection.style.display = 'block';
     }
@@ -310,7 +407,6 @@ window.App = (() => {
   function toggleSettings() {
     const overlay = document.getElementById('settings-overlay');
     if (!overlay) return;
-    // Populate fields
     const profile = E.getUserProfile();
     const apiConfig = E.getAPIConfig();
     const el = (id) => document.getElementById(id);
@@ -333,7 +429,7 @@ window.App = (() => {
 
   function saveSettings() {
     const el = (id) => document.getElementById(id);
-    const nickname = (el('setting-nickname')?.value || '').trim() || '牌手';
+    const nickname = (el('setting-nickname')?.value || '').trim() || 'Hero';
     aiDifficulty = parseInt(el('setting-difficulty')?.value || '2');
 
     const apiConfig = {
@@ -383,7 +479,6 @@ window.App = (() => {
     try {
       const review = Review.reviewHand(game, humanIdx);
       const handSummary = buildHandSummary(review);
-
       const prompt = (apiConfig.reviewPrompt || defaultReviewPrompt()).replace('{{HAND_DATA}}', handSummary);
 
       const response = await fetch(apiConfig.url || 'https://api.openai.com/v1/chat/completions', {
@@ -465,7 +560,6 @@ window.App = (() => {
   function refreshUI() {
     if (!game) return;
     UI.renderTable(game);
-    // Update timeline silently (hidden during play)
     if (game.phase === 'idle') {
       Timeline.render(game);
     }
@@ -473,7 +567,8 @@ window.App = (() => {
 
   // ── Exports ──
   return {
-    init, newHand, playerAction, updateBetSlider,
+    init, newHand, playerAction, betAction,
+    openCustomBet, closeCustomBet, confirmCustomBet,
     rewindTo, toggleGodMode, toggleReview, toggleSettings,
     saveSettings, closeSettings, closeReview, generateAIReview,
     refreshUI,

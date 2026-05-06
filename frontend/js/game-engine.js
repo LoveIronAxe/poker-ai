@@ -399,12 +399,17 @@ window.PokerEngine = (() => {
     const activePlayers = g.players.filter(p => p.status === 'active');
     const alivePlayers = g.players.filter(p => p.status === 'active' || p.status === 'allin' || p.status === 'waiting');
 
-    // Everyone folded except one
-    if (alivePlayers.filter(p => p.status !== 'folded').length <= 1) {
+    // Players who have chips remaining and haven't folded
+    const stillIn = g.players.filter(p => p.status !== 'folded' && p.status !== 'out');
+
+    // Only end hand if NO active players AND NO waiting players with chips
+    // (all remaining players have either folded or are all-in)
+    if (stillIn.length <= 1) {
       endHand(g);
       return 'hand_over';
     }
 
+    // If no active players but some are waiting, advance to next phase
     if (activePlayers.length === 0) {
       advancePhase(g);
       return 'phase_advanced';
@@ -418,7 +423,7 @@ window.PokerEngine = (() => {
       return 'phase_advanced';
     }
 
-    // Move to next player
+    // Move to next player (skip folded/allin/waiting)
     const n = g.players.length;
     for (let off = 1; off <= n; off++) {
       const idx = (g.currentIdx + off) % n;
@@ -427,6 +432,7 @@ window.PokerEngine = (() => {
         return 'next_player';
       }
     }
+    // No more active players, advance phase
     advancePhase(g);
     return 'phase_advanced';
   }
@@ -471,20 +477,11 @@ window.PokerEngine = (() => {
     const first = nextCanAct(g, g.dealerIdx);
     g.currentIdx = first;
 
-    // If only one can act, skip
+    // If only one can act at start of street (everyone else folded), end hand
     const canAct = g.players.filter(p => p.status === 'active');
     if (canAct.length <= 1) {
-      // Run through remaining streets
-      while (g.phase !== 'river') {
-        if (g.phase === 'flop') {
-          g.deck.pop(); g.communityCards.push(g.deck.pop());
-          g.phase = 'turn';
-        } else if (g.phase === 'turn') {
-          g.deck.pop(); g.communityCards.push(g.deck.pop());
-          g.phase = 'river';
-        }
-      }
-      showdown(g);
+      // Only one player left who hasn't folded - they win
+      endHand(g);
       return;
     }
 

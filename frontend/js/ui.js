@@ -24,18 +24,12 @@ window.PokerUI = (() => {
     if (!tableEl) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    // Available space minus chrome (top bar ~40, phase ~20, god ~30, action ~60, margins ~20)
     const availH = vh - 180;
     const maxW = vw > 1024 ? 700 : 640;
     const w = Math.min(vw - 16, maxW);
-    // Poker table oval: width ~1.45x height
     let h = Math.round(w / 1.45);
-    if (h > availH) {
-      h = availH;
-    }
-    if (vw < 500) {
-      h = Math.round(w / 1.3);
-    }
+    if (h > availH) { h = availH; }
+    if (vw < 500) { h = Math.round(w / 1.3); }
     tableEl.style.width = w + 'px';
     tableEl.style.height = h + 'px';
     tableEl.style.flex = '0 0 auto';
@@ -92,18 +86,43 @@ window.PokerUI = (() => {
     const tableH = tableEl.clientHeight;
     const cx = tableW / 2;
     const cy = tableH / 2;
-    const rx = tableW * 0.38;
-    const ry = tableH * 0.38;
+
+    // Find human index
+    const humanIdx = game.players.findIndex(p => p.isHuman);
 
     for (let i = 0; i < n; i++) {
       const p = game.players[i];
       if (p.status === 'out') continue;
 
-      const relPos = (i - game.dealerIdx + n) % n;
-      const angle = (relPos / n) * Math.PI * 2 - Math.PI / 2;
-
-      const x = cx + Math.cos(angle) * rx - 30;
-      const y = cy + Math.sin(angle) * ry - 30;
+      let x, y;
+      if (p.isHuman) {
+        // Hero: always at bottom-center
+        x = cx - 36;
+        y = cy + tableH * 0.32;
+      } else {
+        // AI players: distribute around the table, skipping the hero position
+        const aiIndices = [];
+        for (let j = 0; j < n; j++) {
+          if (j !== humanIdx && game.players[j].status !== 'out') {
+            aiIndices.push(j);
+          }
+        }
+        const aiPos = aiIndices.indexOf(i);
+        const totalAI = aiIndices.length;
+        // Distribute AI players around the table (top semicircle)
+        const startAngle = Math.PI * 0.1;  // slight offset so dealer is readable
+        const endAngle = Math.PI * 0.9;
+        if (totalAI === 1) {
+          x = cx - 36;
+          y = cy - tableH * 0.36;
+        } else {
+          const angle = startAngle + (endAngle - startAngle) * (aiPos / (totalAI - 1));
+          const rx = tableW * 0.40;
+          const ry = tableH * 0.38;
+          x = cx + Math.cos(angle - Math.PI / 2) * rx - 36;
+          y = cy + Math.sin(angle - Math.PI / 2) * ry - 30;
+        }
+      }
 
       const seat = document.createElement('div');
       seat.className = 'player-seat';
@@ -126,7 +145,7 @@ window.PokerUI = (() => {
       info.className = 'player-info';
       const posName = window.PokerAI ? window.PokerAI.getPosName(game, i) : '';
       info.innerHTML = `
-        <div class="name">${p.isHuman ? '⭐ 你' : p.name} <span style="font-size:0.55rem;color:var(--text-dim)">${posName.toUpperCase()}</span></div>
+        <div class="name">${p.isHuman ? '⭐ Hero' : p.name} <span style="font-size:0.55rem;color:var(--text-dim)">${posName.toUpperCase()}</span></div>
         <div class="stack">${p.stack} 筹码</div>
         ${p.lastAction ? `<span class="action-badge ${getActionClass(p.lastAction)}">${p.lastAction}</span>` : ''}
       `;
@@ -210,57 +229,47 @@ window.PokerUI = (() => {
   function renderActionButtons(game) {
     const humanPlayer = game.players.find(p => p.isHuman);
     const humanIdx = game.players.indexOf(humanPlayer);
-    // Deactivate buttons if: no human, human can't act, game inactive, or NOT human's turn
     if (!humanPlayer || humanPlayer.status !== 'active' ||
         game.phase === 'idle' || game.phase === 'showdown' ||
         game.currentIdx !== humanIdx) {
       disableAllButtons();
       return;
     }
-    const legal = E.getLegalActions(game, game.players.indexOf(humanPlayer));
+    const legal = E.getLegalActions(game, humanIdx);
     const can = {};
     for (const a of legal) can[a.type] = a;
 
     const btnFold = getEl('btn-fold');
     const btnCheck = getEl('btn-check');
     const btnCall = getEl('btn-call');
-    const btnRaise = getEl('btn-raise');
+    const btn2x = getEl('btn-bet-2x');
+    const btn3x = getEl('btn-bet-3x');
+    const btn4x = getEl('btn-bet-4x');
+    const btnCustom = getEl('btn-bet-custom');
     const btnAllin = getEl('btn-allin');
 
     btnFold.disabled = !can.fold;
     btnCheck.disabled = !can.check;
     btnCall.disabled = !can.call;
-    btnRaise.disabled = !can.raise && !can.bet;
+    btn2x.disabled = !can.bet && !can.raise;
+    btn3x.disabled = !can.bet && !can.raise;
+    btn4x.disabled = !can.bet && !can.raise;
+    btnCustom.disabled = !can.bet && !can.raise;
     btnAllin.disabled = !can.allin;
 
     if (can.call) btnCall.textContent = `跟注 ${can.call.amount}`;
     else btnCall.textContent = '跟注';
-
-    if (can.raise) {
-      const slider = getEl('bet-slider');
-      slider.min = can.raise.min || game.minRaise;
-      slider.max = Math.min(can.raise.max || humanPlayer.stack, humanPlayer.stack);
-      slider.value = Math.min(slider.max, Math.max(slider.min, can.raise.min || game.minRaise));
-      updateBetSlider();
-    } else if (can.bet) {
-      const slider = getEl('bet-slider');
-      slider.min = can.bet.min || game.bb;
-      slider.max = Math.min(can.bet.max || humanPlayer.stack, humanPlayer.stack);
-      slider.value = Math.min(slider.max, slider.min);
-      updateBetSlider();
-    }
   }
 
   function disableAllButtons() {
-    ['btn-fold','btn-check','btn-call','btn-raise','btn-allin'].forEach(id => {
+    ['btn-fold','btn-check','btn-call','btn-bet-2x','btn-bet-3x','btn-bet-4x','btn-bet-custom','btn-allin'].forEach(id => {
       const btn = getEl(id);
       if (btn) btn.disabled = true;
     });
   }
 
   function updateBetSlider() {
-    const slider = getEl('bet-slider');
-    getEl('bet-amount').textContent = slider.value;
+    // No longer used with new bet button design
   }
 
   function showToast(msg, duration = 2000) {
